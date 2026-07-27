@@ -1,0 +1,69 @@
+{
+  "manifest_version": 3,
+  "name": "Better Half",
+  "version": "0.3.5",
+  "description": "Finds the better half of the price. Verified coupon codes and true total-cost comparison — no login, no affiliate links.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.amazon.com/*",
+    "https://*.target.com/*",
+    "https://redsky.target.com/*",
+    "https://*.walmart.com/*",
+    "https://*.homedepot.com/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "src/background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.amazon.com/*"
+      ],
+      "js": [
+        "src/content/amazon-pdp.js"
+      ],
+      "css": [
+        "src/ui/card.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*/*"
+      ],
+      "js": [
+        "src/coupon/site-profiles.js",
+        "src/coupon/verifier.js",
+        "src/content/coupon-runner.js"
+      ],
+      "css": [
+        "src/ui/card.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "src/ui/popup/popup.html",
+    "default_title": "Better Half",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

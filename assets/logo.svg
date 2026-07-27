@@ -1,0 +1,27 @@
+<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Better Half">
+  <!--
+    Better Half — full mark.
+
+    Three ideas in one shape: a price TAG (what it does), a HEART punched where
+    the tag's string-hole belongs (who it's for), and a B monogram (what it's
+    called). The heart replacing the hole is the point of the whole thing — it
+    occupies the one part of a price tag that is normally empty.
+
+    Geometry note: the tag has to be ELONGATED with a sharp point (~64° apex) to
+    read as a tag. An earlier draft used a short, blunt wedge on a squat body
+    and the silhouette came out as an anonymous pentagon.
+
+    Muted rose rather than red: warm without shouting, and legible on both light
+    and dark browser toolbars, which a dark silhouette would not be.
+  -->
+  <g transform="rotate(-12 64 64)">
+    <path d="M50 34 H109 A13 13 0 0 1 122 47 V81 A13 13 0 0 1 109 94 H50 L2 64 Z"
+          fill="#c4726e"/>
+    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+          fill="#ffffff" transform="translate(49.8 51.2) scale(1.05)"/>
+    <text x="97" y="64.5" fill="#ffffff"
+          font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+          font-size="44" font-weight="600" text-anchor="middle"
+          dominant-baseline="central" letter-spacing="-1">B</text>
+  </g>
+</svg>

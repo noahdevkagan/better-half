@@ -1,0 +1,21 @@
+<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Better Half">
+  <!--
+    Better Half — small mark, for 16px and 32px.
+
+    Deliberately NOT the full logo scaled down. Two changes earn their keep:
+
+      1. The B is dropped. At 16px a 44pt letter collapses into three grey
+         pixels and muddies the silhouette; the monogram was never doing the
+         work at that size, so the heart grows to become the subject.
+
+      2. The tag is squarer and fills more of the frame. The full mark is a long
+         horizontal tag, which leaves big empty margins top and bottom — fine in
+         a wordmark, wasteful in a 16px square where every pixel counts.
+  -->
+  <g transform="rotate(-10 64 64)">
+    <path d="M46 18 H104 A18 18 0 0 1 122 36 V92 A18 18 0 0 1 104 110 H46 L6 64 Z"
+          fill="#c4726e"/>
+    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+          fill="#ffffff" transform="translate(51.6 34.4) scale(2.45)"/>
+  </g>
+</svg>

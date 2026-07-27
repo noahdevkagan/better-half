@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Better Half</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <h1>Better Half <span class="version" id="version"></span></h1>
+    <p class="sub">No login. No affiliate links. Nothing leaves your machine.</p>
+  </header>
+
+  <section class="savings">
+    <div class="amount" id="savings-total">$0.00</div>
+    <div class="label">saved so far</div>
+  </section>
+
+  <section class="settings">
+    <label class="row">
+      <span>Compare prices on Amazon</span>
+      <input type="checkbox" id="comparisonEnabled">
+    </label>
+    <label class="row">
+      <span>Test coupon codes at checkout</span>
+      <input type="checkbox" id="couponsEnabled">
+    </label>
+    <label class="row">
+      <span>I have Amazon Prime</span>
+      <input type="checkbox" id="prime">
+    </label>
+    <label class="row">
+      <span>I have a Target RedCard</span>
+      <input type="checkbox" id="redcard">
+    </label>
+    <label class="row">
+      <span>ZIP code</span>
+      <input type="text" id="zip" maxlength="5" inputmode="numeric" placeholder="78767">
+    </label>
+  </section>
+
+  <section class="diag">
+    <button id="diag-run" type="button">Test retailer connections</button>
+    <ul id="diag-results"></ul>
+  </section>
+
+  <section class="codes">
+    <h2>Verified codes</h2>
+    <p class="empty" id="codes-empty">Nothing yet. Codes appear here once they've been proven on a real cart.</p>
+    <ul id="codes-list"></ul>
+  </section>
+
+  <script src="popup.js"></script>
+</body>
+</html>

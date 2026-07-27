@@ -1,0 +1,15 @@
+node_modules/
+.DS_Store
+*.log
+npm-debug.log*
+
+# Scratch harnesses. The service worker can be imported in Node with a shimmed
+# `chrome` global for debugging (see HANDOFF.md) — those throwaway files live at
+# the repo root by necessity, since Node resolves imports relative to the file.
+sw-*-test.mjs
+diag-test.mjs
+verify.mjs
+
+# Generated previews from the logo build.
+assets/_preview.html
+assets/_raster.html
