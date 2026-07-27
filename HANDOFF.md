@@ -1,6 +1,6 @@
 # Better Half — handoff
 
-**Version 0.3.5 · 70 tests passing · Chrome MV3 · loads unpacked**
+**Version 0.3.6 · 79 tests passing · Chrome MV3 · loads unpacked**
 
 A Chrome extension that (1) proves coupon codes on your real cart before showing them, and
 (2) compares Amazon prices against Target, Walmart and Home Depot including shipping. No
@@ -14,8 +14,8 @@ Read [README.md](README.md) for the *design rationale* — why each rule exists.
 ## Start here
 
 ```bash
-npm test                  # 70 unit tests, no network
-npm run bump              # 0.3.5 -> 0.3.6, keeps manifest+package in lockstep
+npm test                  # 79 unit tests, no network
+npm run bump              # 0.3.6 -> 0.3.7, keeps manifest+package in lockstep
 npm run bump -- minor "what changed"     # also writes CHANGELOG.md
 ```
 
@@ -41,14 +41,22 @@ Be careful here. "Works" below means *verified against a live page or API*, not
 | Home Depot adapter | **Works** | Live search, no bot challenge, model-number lookup resolves exactly |
 | Walmart adapter | **Partly proven** | Page loads with no bot challenge; DOM price parse fixed against one live search page |
 | Coupon verifier | **Proven by hand, NOT in-extension** | `WELCOME20` applied/measured/reverted on Kyte Baby's live checkout — but via console JS, never through the extension itself |
-| Coupon aggregator sources | **Unproven** | SimplyCodes `[data-code]` scrape verified in a browser; never run through `harvest()` |
+| Coupon aggregator sources | **Runs, yield unproven** | `harvest()` confirmed to load CouponFollow in a real tab (v0.3.5 in the wild). Whether the `[data-code]` scrape returns usable codes there is still unverified |
+| Coupon *triggering* | **Was badly wrong, now gated** | v0.3.5 fired on any input matching `/promo\|coupon\|…/`, including aggregators' own search boxes — a self-sustaining tab loop. Fixed in v0.3.6, see `test/coupon-gate.test.js` |
 | Shared/synced code ledger | **Not built** | Deliberately deferred; schema is share-ready |
 
 ### The honest summary
 
-The **comparison** path is in good shape. The **coupon** path has never once run
-end-to-end inside the extension — every part is individually verified, but they've never
-been wired together and executed for real. That's the biggest untested surface.
+The **comparison** path is in good shape. The **coupon** path first ran for real in v0.3.5,
+on a SaaS billing page with a promo field — and immediately exposed the thing unit tests
+could not: *triggering* had never been designed, only detection. "There is an input that
+matches `/promo|coupon/`" was treated as "the user is checking out", and since the
+aggregator pages we open to look up codes are themselves full of coupon-shaped inputs, one
+legitimate trigger became an unbounded loop of tabs opening and closing.
+
+The lesson worth keeping: every part being individually verified said nothing about whether
+the parts should run *at all* on a given page. v0.3.6 adds that gate. The coupon path still
+has not been proven to *succeed* on a real cart — only to no longer fire when it shouldn't.
 
 ---
 
@@ -63,23 +71,35 @@ been wired together and executed for real. That's the biggest untested surface.
    when a variant note exists AND prices differ across variants, either pick the matching
    variant or downgrade the claim.
 
-2. **Coupon flow untested in the extension.** Load it, go to a real Shopify checkout, and
-   watch. Expect the banner, then either an applied code or "no working code found". Verify
-   the cart is untouched when nothing wins.
+2. **Coupon flow still unproven on a real checkout.** It has now been run in a real browser,
+   which is how the v0.3.6 tab loop was found (below) — but that was a *false positive*, not
+   a real cart. Still to do: a real Shopify checkout, expect the banner, then either an
+   applied code or "no working code found". Verify the cart is untouched when nothing wins.
 
-3. **Walmart in *your* Chrome.** It loaded clean here, but this preview browser is Electron
+3. **Harvest tabs land in the user's own window on macOS.** `getWorkerWindow()` tries
+   `type: 'popup'` + `state: 'minimized'` first, and macOS Chrome rejects that combination,
+   so it falls through to a normal unfocused window and then to the caller's current window
+   — where scrape tabs visibly open and close in the tab strip. Likely fix: drop `minimized`
+   and position the worker window off-screen (`left: -2000, top: -2000`), which macOS honours.
+
+4. **Harvest tabs leak when the service worker is killed.** `harvest()` closes its tab in a
+   `finally`, but MV3 terminates the worker after ~30s idle and the `finally` dies with it,
+   stranding an open tab. Observed live as leftover CouponFollow tabs. Likely fix: a sweep on
+   worker startup that closes anything left in the worker window.
+
+5. **Walmart in *your* Chrome.** It loaded clean here, but this preview browser is Electron
    with a non-standard UA. Use the popup's **Test retailer connections** button — that is
    the ground truth, and it takes two seconds.
 
-4. **Amazon SPA navigation.** The content script runs at `document_idle`. Navigating
+6. **Amazon SPA navigation.** The content script runs at `document_idle`. Navigating
    between products via search results sometimes won't re-fire the card; ⌘R always works.
    Fix would be a URL-change observer.
 
-5. **Home Depot titles are slug-derived.** Pod anchors have empty `innerText`, so titles
+7. **Home Depot titles are slug-derived.** Pod anchors have empty `innerText`, so titles
    come from the URL slug (`Milwaukee-SHOCKWAVE-...` → `Milwaukee SHOCKWAVE ...`). Works,
    but it's crude and will read oddly if surfaced more prominently.
 
-6. **`examined` counts candidates considered, not matches rejected.** Fine for the card's
+8. **`examined` counts candidates considered, not matches rejected.** Fine for the card's
    "N candidates considered" line, but don't read more into it.
 
 ---

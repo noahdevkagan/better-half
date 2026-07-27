@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.6 — 2026-07-27
+
+- fix: coupon flow no longer fires outside checkout, and no longer recurses into its own harvest tabs
+
 ## 0.3.5 — 2026-07-26
 
 - added HANDOFF.md — state of play, proven vs unproven, open issues, debugging playbook

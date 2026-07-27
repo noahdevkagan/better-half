@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Better Half",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Finds the better half of the price. Verified coupon codes and true total-cost comparison — no login, no affiliate links.",
   "permissions": [
     "storage",
@@ -38,6 +38,12 @@
     {
       "matches": [
         "https://*/*"
+      ],
+      "exclude_matches": [
+        "https://*.simplycodes.com/*",
+        "https://simplycodes.com/*",
+        "https://*.couponfollow.com/*",
+        "https://couponfollow.com/*"
       ],
       "js": [
         "src/coupon/site-profiles.js",

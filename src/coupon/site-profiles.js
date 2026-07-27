@@ -51,11 +51,34 @@
     },
   ];
 
+  const PROMO_RE = /promo|coupon|discount|voucher|reduction/i;
+
+  /**
+   * A search box is not a promo field.
+   *
+   * "Search for coupons" matches PROMO_RE, which is how every coupon
+   * aggregator's own search box registered as a checkout — and, because the
+   * verifier falls back to pressing Enter when it finds no Apply button, how we
+   * ended up submitting searches on pages the user was only reading.
+   */
+  const SEARCH_RE = /search|query|\bq\b|find|lookup/i;
+
+  function isSearchBox(i) {
+    if (i.type === 'search') return true;
+    if (i.getAttribute('role') === 'searchbox') return true;
+    try {
+      if (i.closest('[role="search"], form[role="search"]')) return true;
+    } catch { /* stub or exotic DOM */ }
+    const hay = `${i.name || ''} ${i.id || ''} ${i.placeholder || ''} ${i.getAttribute('aria-label') || ''}`;
+    return SEARCH_RE.test(hay);
+  }
+
   function findGenericInput() {
     const inputs = [...document.querySelectorAll('input[type="text"], input:not([type])')];
     return inputs.find((i) => {
+      if (isSearchBox(i)) return false;
       const hay = `${i.name || ''} ${i.id || ''} ${i.placeholder || ''} ${i.getAttribute('aria-label') || ''}`;
-      return /promo|coupon|discount|voucher|reduction/i.test(hay);
+      return PROMO_RE.test(hay);
     }) || null;
   }
 
@@ -72,6 +95,50 @@
       } catch { /* a detect() throwing must not break the others */ }
     }
     return null;
+  }
+
+  const CHECKOUT_PATH_RE = /(^|\/)(checkouts?|carts?|basket|bag|orders?|payment|billing)(\/|$)/i;
+
+  const APPLY_RE = /\b(apply|redeem|use\s+code|add\s+code)\b/i;
+
+  /** Is there a control next to this input that applies a code? */
+  function hasApplyControl(input) {
+    if (!input) return false;
+    const scopes = [
+      input.closest?.('form'),
+      input.parentElement,
+      input.parentElement?.parentElement,
+      input.parentElement?.parentElement?.parentElement,
+    ].filter(Boolean);
+    for (const scope of scopes) {
+      for (const b of scope.querySelectorAll('button, input[type="submit"]')) {
+        const l = `${b.textContent || ''} ${b.getAttribute('aria-label') || ''} ${b.value || ''}`;
+        if (APPLY_RE.test(l)) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Should we actually run the coupon flow on this page?
+   *
+   * `detectProfile()` answers "is there something shaped like a promo field",
+   * which is a much weaker claim than "the user is checking out" — and treating
+   * the two as the same is what made this extension type codes into random
+   * pages. So we require money to be on the page, and for the catch-all generic
+   * profile we require a second, independent signal on top of that.
+   */
+  function isCheckoutContext(profile) {
+    if (!profile) return false;
+
+    // No total and no subtotal means no cart, whatever the inputs look like.
+    if (readTotal() == null && readSubtotal() == null) return false;
+
+    // Shopify and BigCommerce identified themselves by platform markers, not by
+    // a placeholder regex, so the field is already strong evidence.
+    if (profile.id !== 'generic') return true;
+
+    return CHECKOUT_PATH_RE.test(location.pathname) || hasApplyControl(profile.inputEl);
   }
 
   /**
@@ -135,5 +202,12 @@
     return false;
   }
 
-  NS.profiles = { detectProfile, readTotal, readSubtotal, paymentFieldPopulated, parseMoney };
+  NS.profiles = {
+    detectProfile,
+    isCheckoutContext,
+    readTotal,
+    readSubtotal,
+    paymentFieldPopulated,
+    parseMoney,
+  };
 })();

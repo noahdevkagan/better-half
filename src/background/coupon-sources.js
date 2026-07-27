@@ -30,6 +30,21 @@ const SOURCES = [
 ];
 
 /**
+ * The sites above, as hostnames.
+ *
+ * Looking up an aggregator's coupons ON the aggregator is never meaningful, and
+ * it is how a tab loop started: a harvested CouponFollow page was mistaken for
+ * a checkout, so we harvested `couponfollow.com/site/couponfollow.com`, which
+ * did the same again. The content script is excluded from these hosts in the
+ * manifest; this is the second lock, on the side that opens the tabs.
+ */
+const AGGREGATOR_HOSTS = /(^|\.)(simplycodes|couponfollow)\.com$/i;
+
+export function isAggregatorDomain(domain) {
+  return AGGREGATOR_HOSTS.test(String(domain || '').replace(/^www\./, ''));
+}
+
+/**
  * Runs INSIDE the harvested tab. Must be self-contained.
  *
  * We read `[data-code]` rather than scanning text: aggregator pages carry a
@@ -87,6 +102,7 @@ export function rankCandidates(entries) {
  */
 export async function fetchCandidates(domain, { limit = 8 } = {}) {
   if (!domain || domain.includes(':')) return [];
+  if (isAggregatorDomain(domain)) return [];
 
   for (const build of SOURCES) {
     try {
@@ -99,4 +115,4 @@ export async function fetchCandidates(domain, { limit = 8 } = {}) {
   return [];
 }
 
-export const __test__ = { rankCandidates, percentFrom, REFERRAL_RE, NOISE_RE };
+export const __test__ = { rankCandidates, percentFrom, REFERRAL_RE, NOISE_RE, AGGREGATOR_HOSTS };

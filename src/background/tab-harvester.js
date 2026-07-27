@@ -23,6 +23,22 @@ let active = 0;
 const queue = [];
 
 /**
+ * Tabs we opened ourselves.
+ *
+ * The coupon content script matches every https page, so it also loads inside
+ * these tabs. Without this set, harvesting an aggregator page made that page look
+ * like a checkout, which kicked off a harvest for the aggregator's own domain,
+ * which opened another tab, and so on — an unbounded loop of tabs opening and
+ * closing while the user was nowhere near a store.
+ */
+const harvestTabIds = new Set();
+
+/** Is this tab one of ours? Content scripts must do nothing inside them. */
+export function isHarvestTab(tabId) {
+  return tabId != null && harvestTabIds.has(tabId);
+}
+
+/**
  * A minimised popup window is the tidiest place to do this work, but it is not
  * available on every platform — `type: 'popup'` combined with
  * `state: 'minimized'` is rejected in some Chrome builds. If that fails we fall
@@ -130,6 +146,7 @@ export async function harvest(url, extractor, opts = {}) {
       windowId != null ? { url, windowId, active: false } : { url, active: false },
     );
     tabId = tab.id;
+    harvestTabIds.add(tabId);
 
     await waitForComplete(tabId, timeoutMs);
 
@@ -148,6 +165,7 @@ export async function harvest(url, extractor, opts = {}) {
     return result?.result ?? null;
   } finally {
     if (tabId != null) {
+      harvestTabIds.delete(tabId);
       try { await chrome.tabs.remove(tabId); } catch { /* already gone */ }
     }
     releaseSlot();

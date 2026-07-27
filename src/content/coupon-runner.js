@@ -8,7 +8,7 @@
   const NS = (window.__SD__ = window.__SD__ || {});
   if (!NS.profiles || !NS.verifier) return; // load order guard
 
-  const { detectProfile, readSubtotal } = NS.profiles;
+  const { detectProfile, isCheckoutContext, readSubtotal } = NS.profiles;
   const { verify } = NS.verifier;
 
   /**
@@ -95,12 +95,13 @@
 
   // --------------------------------------------------------------- start --
 
-  async function run() {
+  async function run(profile) {
     const settings = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' }).catch(() => null);
     if (settings && settings.couponsEnabled === false) return;
 
-    const profile = detectProfile();
-    if (!profile) return;
+    // A tab the extension opened to scrape a page. Running here would have us
+    // shopping for coupons inside our own coupon lookup.
+    if (settings && settings.harvestTab) return;
 
     const subtotal = readSubtotal();
     const known = await chrome.runtime
@@ -166,12 +167,18 @@
   }
 
   // Checkouts are SPAs; the promo field often appears after first paint.
+  //
+  // Both conditions are re-checked on every mutation and `started` is only set
+  // once we commit, so a cart that renders its total late still gets picked up
+  // rather than being permanently disqualified by the first failed check.
   let started = false;
   const kick = () => {
     if (started) return;
-    if (!detectProfile()) return;
+    const profile = detectProfile();
+    if (!profile) return;
+    if (!isCheckoutContext(profile)) return;
     started = true;
-    run().catch((e) => console.debug('[better-half]', e));
+    run(profile).catch((e) => console.debug('[better-half]', e));
   };
 
   kick();

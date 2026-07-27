@@ -10,7 +10,7 @@ import * as walmart from '../adapters/walmart.js';
 import * as homedepot from '../adapters/homedepot.js';
 import * as ledger from '../ledger/store.js';
 import * as couponSources from './coupon-sources.js';
-import { withTimeout } from './tab-harvester.js';
+import { withTimeout, isHarvestTab } from './tab-harvester.js';
 
 // Target answers plain fetch() in milliseconds. Walmart and Home Depot need a
 // harvested tab, and Walmart may be blocked outright, so no adapter is allowed
@@ -205,7 +205,7 @@ async function diagnose() {
 
 // ------------------------------------------------------------- messaging --
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === 'COMPARE') {
     compare(msg.product)
       .then(sendResponse)
@@ -221,6 +221,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 
   if (msg?.type === 'GET_CODES') {
+    // A harvest tab asking for codes means the coupon flow started inside our
+    // own scrape. Nothing good comes of answering it.
+    if (isHarvestTab(sender.tab?.id)) {
+      sendResponse({ codes: [], candidates: [] });
+      return false;
+    }
+
     // Proven codes come from local storage instantly; aggregator codes need a
     // harvested tab. Run both and merge, so a slow/blocked aggregator can never
     // delay the codes we already trust.
@@ -237,7 +244,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 
   if (msg?.type === 'GET_SETTINGS') {
-    ledger.getSettings().then(sendResponse);
+    // `harvestTab` is per-caller, not a stored setting — it tells a content
+    // script whether it is running inside a tab we opened.
+    const harvestTab = isHarvestTab(sender.tab?.id);
+    ledger.getSettings().then((s) => sendResponse({ ...s, harvestTab }));
     return true;
   }
 
