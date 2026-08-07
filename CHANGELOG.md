@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.8 — 2026-08-07
+
+- Bound every await in getWorkerWindow — a hanging minimise was stalling Walmart and Home Depot
+
 ## 0.3.7 — 2026-08-07
 
 - Hide the harvest window reliably on macOS, and sweep windows stranded when MV3 kills the worker

@@ -21,6 +21,25 @@ const DEFAULT_TIMEOUT_MS = 12000;
 const MAX_CONCURRENT = 3;
 const WORKER_WINDOW_KEY = 'harvestWorkerWindowId';
 
+/**
+ * Budgets for getting a worker window ready.
+ *
+ * These exist because v0.3.7 shipped without them and both tab-based retailers
+ * stopped returning anything: Walmart and Home Depot each ran past the 22s
+ * per-adapter timeout without their own 15s/20s harvest timeouts ever firing,
+ * which can only happen if the stall is *before* the timed section — i.e. in
+ * here. `chrome.windows.update({state:'minimized'})` appears to hang on macOS
+ * rather than reject, and a try/catch cannot save you from a promise that never
+ * settles.
+ *
+ * Hiding the window is a nicety. Harvesting is the product. Nothing here may
+ * ever cost more than a couple of seconds, and a failure to hide must still
+ * return a usable window.
+ */
+const HIDE_STEP_TIMEOUT_MS = 1200;
+const WINDOW_SETUP_TIMEOUT_MS = 5000;
+const SWEEP_TIMEOUT_MS = 2000;
+
 let workerWindowId = null;
 let active = 0;
 const queue = [];
@@ -56,13 +75,21 @@ export function isHarvestTab(tabId) {
  */
 async function hideWindow(id) {
   try {
-    await chrome.windows.update(id, { state: 'minimized' });
+    await withTimeout(
+      chrome.windows.update(id, { state: 'minimized' }),
+      HIDE_STEP_TIMEOUT_MS,
+      'minimise hung',
+    );
     return true;
   } catch (e) {
     console.debug('[better-half] could not minimise worker window', e);
   }
   try {
-    await chrome.windows.update(id, { left: -2000, top: -2000 });
+    await withTimeout(
+      chrome.windows.update(id, { left: -2000, top: -2000 }),
+      HIDE_STEP_TIMEOUT_MS,
+      'off-screen move hung',
+    );
     return true;
   } catch (e) {
     console.debug('[better-half] could not move worker window off-screen', e);
@@ -180,27 +207,48 @@ const staleSweep = sweepStaleWorkerWindow();
 async function getWorkerWindow() {
   if (workerWindowId != null) {
     try {
-      await chrome.windows.get(workerWindowId);
+      await withTimeout(
+        chrome.windows.get(workerWindowId),
+        HIDE_STEP_TIMEOUT_MS,
+        'window lookup hung',
+      );
       return workerWindowId;
     } catch {
-      await forgetWorkerWindow(); // user closed it
+      // Closed by the user, or the API stopped answering. Either way this id is
+      // no longer usable; falling through to make a fresh one beats waiting.
+      await withTimeout(forgetWorkerWindow(), HIDE_STEP_TIMEOUT_MS, 'forget hung')
+        .catch(() => { workerWindowId = null; });
     }
   }
-  await staleSweep.catch(() => {});
+  await withTimeout(staleSweep, SWEEP_TIMEOUT_MS, 'sweep hung').catch(() => {});
   try {
-    const win = await chrome.windows.create({
-      url: 'about:blank',
-      focused: false,
-      width: 500,
-      height: 400,
-    });
-    await rememberWorkerWindow(win.id);
-    await hideWindow(win.id);
-    return workerWindowId;
+    return await withTimeout(
+      createWorkerWindow(),
+      WINDOW_SETUP_TIMEOUT_MS,
+      'worker window setup hung',
+    );
   } catch (e) {
-    console.debug('[better-half] no worker window at all; using current', e);
+    console.debug('[better-half] no worker window; using current', e);
     return null;
   }
+}
+
+/**
+ * The id is recorded *before* we try to hide the window, deliberately. If
+ * hiding hangs past the budget above, the window still exists — recording it
+ * first is what lets the cleanup and the startup sweep find it later, instead
+ * of stranding exactly the kind of window this file exists to avoid.
+ */
+async function createWorkerWindow() {
+  const win = await chrome.windows.create({
+    url: 'about:blank',
+    focused: false,
+    width: 500,
+    height: 400,
+  });
+  await rememberWorkerWindow(win.id);
+  await hideWindow(win.id);
+  return workerWindowId;
 }
 
 /**

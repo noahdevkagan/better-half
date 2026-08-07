@@ -1,6 +1,6 @@
 # Better Half — handoff
 
-**Version 0.3.7 · 86 tests passing · Chrome MV3 · loads unpacked**
+**Version 0.3.8 · 87 tests passing · Chrome MV3 · loads unpacked**
 
 A Chrome extension that (1) proves coupon codes on your real cart before showing them, and
 (2) compares Amazon prices against Target, Walmart and Home Depot including shipping. No
@@ -14,8 +14,8 @@ Read [README.md](README.md) for the *design rationale* — why each rule exists.
 ## Start here
 
 ```bash
-npm test                  # 86 unit tests, no network
-npm run bump              # 0.3.7 -> 0.3.8, keeps manifest+package in lockstep
+npm test                  # 87 unit tests, no network
+npm run bump              # 0.3.8 -> 0.3.9, keeps manifest+package in lockstep
 npm run bump -- minor "what changed"     # also writes CHANGELOG.md
 ```
 
@@ -76,12 +76,19 @@ has not been proven to *succeed* on a real cart — only to no longer fire when 
    a real cart. Still to do: a real Shopify checkout, expect the banner, then either an
    applied code or "no working code found". Verify the cart is untouched when nothing wins.
 
-3. **Harvest tabs land in the user's own window on macOS.** *Code changed in v0.3.7, NOT yet
-   confirmed in real Chrome — this is the next thing to check.* `getWorkerWindow()` now
+3. **Harvest tabs land in the user's own window on macOS.** *Visible symptom fixed and
+   confirmed live in v0.3.7 — no tabs blinking, nothing on the desktop.* `getWorkerWindow()`
    creates a plain unfocused window and hides it *afterwards* (`windows.update` with
    `state: 'minimized'`, falling back to `left: -2000, top: -2000`), because macOS rejects
-   `minimized` at *create* time but honours it on a window that already exists. Verify by
-   running a comparison and watching whether anything flashes on the desktop.
+   `minimized` at *create* time but honours it on a window that already exists.
+
+   **What that first live run also exposed:** hiding the window made both tab-based
+   retailers time out. `windows.update({state:'minimized'})` does not reject on macOS — it
+   *hangs* — and v0.3.7 awaited it unbounded, so Walmart and Home Depot blew past the 22s
+   per-adapter timeout without their own 15s/20s harvest timeouts ever firing. That gap is
+   the diagnostic: when the outer timeout fires and the inner ones don't, the stall is before
+   the timed section. v0.3.8 bounds every await in there. Still to confirm live: that Walmart
+   and Home Depot now return results rather than `timed out`.
 
 4. **Harvest tabs leak when the service worker is killed.** *Fixed in v0.3.7, unit-tested,
    not yet observed live.* `harvest()` closes its tab in a `finally`, but MV3 terminates the
@@ -179,8 +186,11 @@ into bugs.
   module. Because that throw happens during module evaluation it fails the whole service
   worker registration, and it takes any importer's tests down with it: writing it the wrong
   way in `tab-harvester.js` turned three unrelated test files red at once.
-- **Everything needs a timeout.** An unbounded `await` anywhere becomes a permanent spinner
-  in the user's face — that exact bug shipped once.
+- **Everything needs a timeout, and a `try/catch` is not one.** An unbounded `await` anywhere
+  becomes a permanent spinner in the user's face — that exact bug has now shipped twice. The
+  second time, v0.3.7 wrapped `windows.update({state:'minimized'})` in a `try/catch` and
+  assumed that covered it; on macOS the call never settles, so the catch never runs and the
+  harvest simply stopped. A catch handles rejection. Only a timeout handles silence.
 - **The card must never vanish.** Silently removing it is indistinguishable from a crash.
 
 ---

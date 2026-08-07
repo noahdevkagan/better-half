@@ -155,6 +155,30 @@ test('the sweep never rejects, even when storage itself fails', async () => {
   await assert.doesNotReject(() => mod.__test__.sweepStaleWorkerWindow());
 });
 
+test('a hanging windows.update cannot stall the harvest', async () => {
+  // v0.3.7 shipped this bug: `windows.update({state:'minimized'})` hangs on
+  // macOS rather than rejecting, and getWorkerWindow awaited it unbounded. Both
+  // tab-based retailers then blew past the 22s per-adapter timeout without
+  // their own 15s/20s harvest timeouts ever firing — the tell that the stall
+  // was before the timed section. A try/catch cannot save you from a promise
+  // that never settles; only a timeout can.
+  shimChrome({ session: {}, openIds: [] });
+  globalThis.chrome.windows.update = () => new Promise(() => {}); // never settles
+
+  const mod = await freshImport();
+
+  const started = process.hrtime.bigint();
+  // The tab never loads in the shim, so harvest rejects — the point is *when*.
+  await mod.harvest('https://example.com', () => null, { timeoutMs: 50 })
+    .catch(() => {});
+  const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+
+  assert.ok(
+    elapsedMs < 6000,
+    `harvest should give up on hiding and get on with it, took ${Math.round(elapsedMs)}ms`,
+  );
+});
+
 test('shutdownWorkerWindow clears the stored id, so the next startup is a no-op', async () => {
   const { store, removed } = shimChrome({ session: {}, openIds: [] });
 
