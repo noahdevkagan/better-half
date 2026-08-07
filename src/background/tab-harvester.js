@@ -8,15 +8,18 @@
  * real tab load the page, then read the result out of it.
  *
  * Everything here exists to keep that invisible and bounded:
- *   - one reused minimised, unfocused window, so the user's tab strip is clean
+ *   - one reused window, created then hidden, so the user's tab strip is clean
  *   - a hard timeout, so a hanging page can't wedge the extension
  *   - a concurrency cap, so we never open a swarm of tabs
  *   - tabs closed in a finally, so a thrown error can't leak them
+ *   - a sweep at worker startup, because MV3 kills the worker and that finally
+ *     with it
  */
 
 const WINDOW_TITLE_MARKER = 'better-half-worker';
 const DEFAULT_TIMEOUT_MS = 12000;
 const MAX_CONCURRENT = 3;
+const WORKER_WINDOW_KEY = 'harvestWorkerWindowId';
 
 let workerWindowId = null;
 let active = 0;
@@ -39,14 +42,140 @@ export function isHarvestTab(tabId) {
 }
 
 /**
- * A minimised popup window is the tidiest place to do this work, but it is not
- * available on every platform — `type: 'popup'` combined with
- * `state: 'minimized'` is rejected in some Chrome builds. If that fails we fall
- * back to an unfocused tab in the current window: slightly visible, but working
- * beats invisible-and-broken.
+ * Hide a window that already exists.
+ *
+ * Creating it hidden does not work: `state: 'minimized'` passed to
+ * `windows.create` is rejected on macOS (combined with `type: 'popup'` it is
+ * rejected outright), which is how every harvest ended up in a plain visible
+ * `about:blank` window blinking on the user's desktop. Minimising a window that
+ * already exists is supported everywhere, so we create first and hide second.
+ *
+ * Off-screen is the fallback rather than the primary: macOS clamps window
+ * bounds towards the visible screen, so it hides the window on some setups and
+ * merely shoves it into a corner on others.
+ */
+async function hideWindow(id) {
+  try {
+    await chrome.windows.update(id, { state: 'minimized' });
+    return true;
+  } catch (e) {
+    console.debug('[better-half] could not minimise worker window', e);
+  }
+  try {
+    await chrome.windows.update(id, { left: -2000, top: -2000 });
+    return true;
+  } catch (e) {
+    console.debug('[better-half] could not move worker window off-screen', e);
+    return false;
+  }
+}
+
+/**
+ * Where the worker window id lives between service worker lifetimes.
+ *
+ * `session`, deliberately, and this is a safety property rather than a
+ * preference. Window ids are only unique within a browser session; after a
+ * restart Chrome's counter starts over and an old id can name one of the user's
+ * real windows. `storage.session` survives the worker being killed — the case
+ * the sweep below exists for — and is wiped when the browser closes, which is
+ * exactly the case where acting on a remembered id would close someone's work.
+ *
+ * Returns null where it isn't available (notably the Node shim used to import
+ * this module in tests), which degrades to the old in-memory-only behaviour
+ * rather than throwing at import time and taking the worker down with it.
+ *
+ * `globalThis.chrome`, not bare `chrome`: optional chaining only guards a
+ * declared identifier against being null. Where `chrome` is not declared at all
+ * — any plain Node import of this module — `chrome?.` still throws a
+ * ReferenceError, and since this runs at module evaluation that throw fails the
+ * entire service worker registration.
+ */
+function sessionStore() {
+  return globalThis.chrome?.storage?.session ?? null;
+}
+
+async function rememberWorkerWindow(id) {
+  workerWindowId = id;
+  const store = sessionStore();
+  if (!store) return;
+  try {
+    await store.set({ [WORKER_WINDOW_KEY]: id });
+  } catch (e) {
+    console.debug('[better-half] could not persist worker window id', e);
+  }
+}
+
+async function forgetWorkerWindow() {
+  workerWindowId = null;
+  const store = sessionStore();
+  if (!store) return;
+  try {
+    await store.remove(WORKER_WINDOW_KEY);
+  } catch (e) {
+    console.debug('[better-half] could not clear worker window id', e);
+  }
+}
+
+/**
+ * Close a worker window stranded by a previous service worker.
+ *
+ * `harvest()` closes its tab in a `finally`, which is enough for a thrown error
+ * but not for MV3: the worker is terminated after ~30s idle and the `finally`
+ * dies with it, leaving the tab — and the window holding it — open. Observed
+ * live as leftover CouponFollow tabs.
+ *
+ * This runs once per worker startup, which is what module evaluation means
+ * here. Nothing of ours can be in flight at that point (a fresh worker has no
+ * harvests), so anything still recorded is by definition abandoned.
+ *
+ * Never rejects: an unhandled rejection during module evaluation fails the
+ * whole service worker registration, which would cost the extension entirely to
+ * clean up one stray window.
+ */
+export async function sweepStaleWorkerWindow() {
+  const store = sessionStore();
+  if (!store) return null;
+
+  let stale = null;
+  try {
+    const stored = await store.get(WORKER_WINDOW_KEY);
+    stale = stored?.[WORKER_WINDOW_KEY] ?? null;
+  } catch (e) {
+    console.debug('[better-half] could not read stale worker window id', e);
+    return null;
+  }
+  if (stale == null) return null;
+
+  try {
+    await chrome.windows.remove(stale);
+    console.debug('[better-half] swept stale worker window', stale);
+  } catch {
+    /* already gone — the id is stale either way, fall through and clear it */
+  }
+  try {
+    await store.remove(WORKER_WINDOW_KEY);
+  } catch (e) {
+    console.debug('[better-half] could not clear stale worker window id', e);
+  }
+  return stale;
+}
+
+/**
+ * Kicked off at module evaluation — i.e. once per service worker startup.
+ * `getWorkerWindow()` awaits it before creating anything, so a sweep still in
+ * flight can never remove a window we just opened.
+ */
+const staleSweep = sweepStaleWorkerWindow();
+
+/**
+ * One reused window that harvest tabs live in, kept out of the user's way.
+ *
+ * Deliberately `type: 'normal'` (the default): `tabs.create({ windowId })` into
+ * a popup window is not reliable, and a popup has no tab strip to keep clean in
+ * the first place.
  *
  * Returns null when no worker window could be made, meaning "use the caller's
- * current window".
+ * current window" — visible, but working beats invisible-and-broken.
  */
 async function getWorkerWindow() {
   if (workerWindowId != null) {
@@ -54,24 +183,19 @@ async function getWorkerWindow() {
       await chrome.windows.get(workerWindowId);
       return workerWindowId;
     } catch {
-      workerWindowId = null; // user closed it
+      await forgetWorkerWindow(); // user closed it
     }
   }
+  await staleSweep.catch(() => {});
   try {
     const win = await chrome.windows.create({
       url: 'about:blank',
-      state: 'minimized',
       focused: false,
-      type: 'popup',
+      width: 500,
+      height: 400,
     });
-    workerWindowId = win.id;
-    return workerWindowId;
-  } catch (e) {
-    console.debug('[better-half] minimised worker window unavailable', e);
-  }
-  try {
-    const win = await chrome.windows.create({ url: 'about:blank', focused: false });
-    workerWindowId = win.id;
+    await rememberWorkerWindow(win.id);
+    await hideWindow(win.id);
     return workerWindowId;
   } catch (e) {
     console.debug('[better-half] no worker window at all; using current', e);
@@ -239,5 +363,7 @@ export async function fetchJson(url, { timeoutMs = 8000 } = {}) {
 export async function shutdownWorkerWindow() {
   if (workerWindowId == null) return;
   try { await chrome.windows.remove(workerWindowId); } catch { /* noop */ }
-  workerWindowId = null;
+  await forgetWorkerWindow();
 }
+
+export const __test__ = { WORKER_WINDOW_KEY, sweepStaleWorkerWindow };

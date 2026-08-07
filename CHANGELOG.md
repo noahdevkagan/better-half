@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.7 — 2026-08-07
+
+- Hide the harvest window reliably on macOS, and sweep windows stranded when MV3 kills the worker
+
 ## 0.3.6 — 2026-07-27
 
 - fix: coupon flow no longer fires outside checkout, and no longer recurses into its own harvest tabs

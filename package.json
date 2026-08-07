@@ -1,6 +1,6 @@
 {
   "name": "better-half",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "private": true,
   "type": "module",
   "description": "Chrome extension: finds the better half of the price. Verified coupon codes and true total-cost comparison.",

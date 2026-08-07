@@ -1,6 +1,6 @@
 # Better Half — handoff
 
-**Version 0.3.6 · 79 tests passing · Chrome MV3 · loads unpacked**
+**Version 0.3.7 · 86 tests passing · Chrome MV3 · loads unpacked**
 
 A Chrome extension that (1) proves coupon codes on your real cart before showing them, and
 (2) compares Amazon prices against Target, Walmart and Home Depot including shipping. No
@@ -14,8 +14,8 @@ Read [README.md](README.md) for the *design rationale* — why each rule exists.
 ## Start here
 
 ```bash
-npm test                  # 79 unit tests, no network
-npm run bump              # 0.3.6 -> 0.3.7, keeps manifest+package in lockstep
+npm test                  # 86 unit tests, no network
+npm run bump              # 0.3.7 -> 0.3.8, keeps manifest+package in lockstep
 npm run bump -- minor "what changed"     # also writes CHANGELOG.md
 ```
 
@@ -76,16 +76,27 @@ has not been proven to *succeed* on a real cart — only to no longer fire when 
    a real cart. Still to do: a real Shopify checkout, expect the banner, then either an
    applied code or "no working code found". Verify the cart is untouched when nothing wins.
 
-3. **Harvest tabs land in the user's own window on macOS.** `getWorkerWindow()` tries
-   `type: 'popup'` + `state: 'minimized'` first, and macOS Chrome rejects that combination,
-   so it falls through to a normal unfocused window and then to the caller's current window
-   — where scrape tabs visibly open and close in the tab strip. Likely fix: drop `minimized`
-   and position the worker window off-screen (`left: -2000, top: -2000`), which macOS honours.
+3. **Harvest tabs land in the user's own window on macOS.** *Code changed in v0.3.7, NOT yet
+   confirmed in real Chrome — this is the next thing to check.* `getWorkerWindow()` now
+   creates a plain unfocused window and hides it *afterwards* (`windows.update` with
+   `state: 'minimized'`, falling back to `left: -2000, top: -2000`), because macOS rejects
+   `minimized` at *create* time but honours it on a window that already exists. Verify by
+   running a comparison and watching whether anything flashes on the desktop.
 
-4. **Harvest tabs leak when the service worker is killed.** `harvest()` closes its tab in a
-   `finally`, but MV3 terminates the worker after ~30s idle and the `finally` dies with it,
-   stranding an open tab. Observed live as leftover CouponFollow tabs. Likely fix: a sweep on
-   worker startup that closes anything left in the worker window.
+4. **Harvest tabs leak when the service worker is killed.** *Fixed in v0.3.7, unit-tested,
+   not yet observed live.* `harvest()` closes its tab in a `finally`, but MV3 terminates the
+   worker after ~30s idle and the `finally` dies with it. The worker window id is now kept in
+   `chrome.storage.session` and swept at module evaluation, i.e. once per worker startup.
+
+   **`storage.session`, not `.local`, is load-bearing.** Window ids are only unique within a
+   browser session; after a restart the counter resets and a remembered id can name one of
+   the user's real windows. `session` survives the worker being killed (what we need) and is
+   wiped when the browser closes (where acting on the id would close someone's work). Do not
+   "improve" this to `.local` for durability.
+
+   To reproduce the original leak: start a harvest, then hit *stop* on the service worker in
+   `chrome://extensions` mid-flight. The tab should survive; reloading the page (which wakes
+   the worker) should then sweep it.
 
 5. **Walmart in *your* Chrome.** It loaded clean here, but this preview browser is Electron
    with a non-standard UA. Use the popup's **Test retailer connections** button — that is
@@ -120,6 +131,9 @@ message handlers directly:
 ```js
 globalThis.chrome = {
   runtime: { onMessage: { addListener: (fn) => { listener = fn; } } },
+  // Omitting storage.session is fine — the harvester degrades to in-memory.
+  // Add it (get/set/remove) if you want to exercise the stale-window sweep;
+  // `test/worker-window.test.js` has a working one.
   storage: { local: { get: async () => ({}), set: async () => {} } },
   tabs: { create: async () => { throw new Error('no tabs in node'); }, /* … */ },
   windows: { create: async () => { throw new Error('no windows'); }, /* … */ },
@@ -159,6 +173,12 @@ into bugs.
   nearly every Shopify store. Only write to the discount input, never click pay.
 - **Don't exhaustively test coupon codes.** Single-use codes are consumed by testing. Stop
   at the first good-enough win.
+- **At module scope, reach for `globalThis.chrome`, never bare `chrome`.** Optional chaining
+  only guards a *declared* identifier against being null — `chrome?.storage` still throws a
+  ReferenceError where `chrome` was never declared, which is every plain Node import of the
+  module. Because that throw happens during module evaluation it fails the whole service
+  worker registration, and it takes any importer's tests down with it: writing it the wrong
+  way in `tab-harvester.js` turned three unrelated test files red at once.
 - **Everything needs a timeout.** An unbounded `await` anywhere becomes a permanent spinner
   in the user's face — that exact bug shipped once.
 - **The card must never vanish.** Silently removing it is indistinguishable from a crash.
@@ -182,7 +202,7 @@ src/
   match/               normalize · keywords · confidence   ← the tested core
   ledger/store.js      chrome.storage, share-ready schema
   ui/                  card.css, popup/
-test/                  match · search · unsized · hardware
+test/                  match · search · unsized · hardware · coupon-gate · worker-window
 scripts/               bump.js · live-check.js
 ```
 
