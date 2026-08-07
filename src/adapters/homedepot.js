@@ -13,7 +13,7 @@
  * data, and they carry clean structured attributes.
  */
 
-import { harvest } from '../background/tab-harvester.js';
+import { harvest, budgetFor } from '../background/tab-harvester.js';
 import { decodeEntities, normalizeQuantity, parsePriceInfo } from '../match/normalize.js';
 import { buildKeyword } from '../match/keywords.js';
 
@@ -113,9 +113,13 @@ async function extractPods() {
   return { blocked: false, items };
 }
 
-async function runSearch(query) {
+const SEARCH_CAP_MS = 20000;
+
+async function runSearch(query, deadline) {
+  const timeoutMs = budgetFor(deadline, SEARCH_CAP_MS);
+  if (timeoutMs == null) throw new Error('homedepot: out of time');
   const url = `https://www.homedepot.com/s/${encodeURIComponent(query)}`;
-  const res = await harvest(url, extractPods, { timeoutMs: 20000 });
+  const res = await harvest(url, extractPods, { timeoutMs });
   if (!res) return [];
   if (res.blocked) throw new Error('homedepot: bot challenge');
   return res.items || [];
@@ -127,20 +131,23 @@ async function runSearch(query) {
  * Model number first: it is exact, and Home Depot's search resolves it
  * directly. Keyword search is the fallback.
  */
-export async function search(source) {
+export async function search(source, { deadline } = {}) {
   const title = typeof source === 'string' ? source : source?.title;
   const model = typeof source === 'string' ? null : source?.model;
 
   let items = [];
   if (model) {
-    try { items = await runSearch(model); } catch (e) {
+    try { items = await runSearch(model, deadline); } catch (e) {
       if (/bot challenge/.test(e.message)) throw e;
     }
   }
   if (!items.length) {
     const keyword = buildKeyword(title);
     if (!keyword) return [];
-    items = await runSearch(keyword);
+    // The model-number attempt has already spent part of the budget; see the
+    // matching note in walmart.js. An honest "no match" beats a timeout.
+    if (budgetFor(deadline, SEARCH_CAP_MS) == null) return [];
+    items = await runSearch(keyword, deadline);
   }
 
   return items.map((it) => {
@@ -168,8 +175,8 @@ export async function enrich(candidate) {
   return candidate;
 }
 
-export async function lookup(sourceProduct, { preselect } = {}) {
-  const candidates = await search(sourceProduct);
+export async function lookup(sourceProduct, { preselect, deadline } = {}) {
+  const candidates = await search(sourceProduct, { deadline });
   if (!candidates.length) return [];
   return (preselect ? preselect(candidates) : candidates).slice(0, 6);
 }

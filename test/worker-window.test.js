@@ -155,6 +155,46 @@ test('the sweep never rejects, even when storage itself fails', async () => {
   await assert.doesNotReject(() => mod.__test__.sweepStaleWorkerWindow());
 });
 
+// ------------------------------------------------ shared adapter budget --
+
+test('two search phases cannot bill more than the adapter budget', async () => {
+  // Measured live in real Chrome: Walmart reported "timed out · 22002ms" while
+  // both of its 15s harvests stayed inside their own limits. Two phases each
+  // capped separately at 15s bill 30s against a 22s budget, and the per-phase
+  // timers never fire because neither phase is individually late.
+  shimChrome();
+  const { budgetFor } = await freshImport();
+
+  const deadline = Date.now() + 22000;
+  const first = budgetFor(deadline, 15000);
+  assert.equal(first, 15000, 'the first phase gets its full cap');
+
+  // Pretend the first phase used all 15s.
+  const afterFirst = budgetFor(deadline - 15000, 15000);
+  assert.ok(afterFirst <= 7000, `second phase must fit what is left, got ${afterFirst}`);
+  assert.ok(first + afterFirst <= 22000, 'the two phases together stay in budget');
+});
+
+test('a phase with no useful time left is skipped, not started', async () => {
+  shimChrome();
+  const { budgetFor, MIN_USEFUL_MS } = await freshImport();
+
+  assert.equal(
+    budgetFor(Date.now() + 500, 15000),
+    null,
+    'half a second cannot load a retail page — say so instead of timing out',
+  );
+  assert.ok(MIN_USEFUL_MS >= 1000, 'the floor should be a real page-load budget');
+});
+
+test('no deadline keeps the old fixed-cap behaviour', async () => {
+  shimChrome();
+  const { budgetFor } = await freshImport();
+
+  assert.equal(budgetFor(null, 15000), 15000);
+  assert.equal(budgetFor(undefined, 20000), 20000);
+});
+
 test('a hanging windows.update cannot stall the harvest', async () => {
   // v0.3.7 shipped this bug: `windows.update({state:'minimized'})` hangs on
   // macOS rather than rejecting, and getWorkerWindow awaited it unbounded. Both

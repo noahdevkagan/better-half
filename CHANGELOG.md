@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.9 — 2026-08-07
+
+- Give each retailer one shared deadline, so two-phase searches cannot stack past the budget
+
 ## 0.3.8 — 2026-08-07
 
 - Bound every await in getWorkerWindow — a hanging minimise was stalling Walmart and Home Depot

@@ -1,6 +1,6 @@
 # Better Half — handoff
 
-**Version 0.3.8 · 87 tests passing · Chrome MV3 · loads unpacked**
+**Version 0.3.9 · 90 tests passing · Chrome MV3 · loads unpacked**
 
 A Chrome extension that (1) proves coupon codes on your real cart before showing them, and
 (2) compares Amazon prices against Target, Walmart and Home Depot including shipping. No
@@ -14,8 +14,8 @@ Read [README.md](README.md) for the *design rationale* — why each rule exists.
 ## Start here
 
 ```bash
-npm test                  # 87 unit tests, no network
-npm run bump              # 0.3.8 -> 0.3.9, keeps manifest+package in lockstep
+npm test                  # 90 unit tests, no network
+npm run bump              # 0.3.9 -> 0.3.10, keeps manifest+package in lockstep
 npm run bump -- minor "what changed"     # also writes CHANGELOG.md
 ```
 
@@ -37,9 +37,9 @@ Be careful here. "Works" below means *verified against a live page or API*, not
 |---|---|---|
 | Match gate (`src/match/`) | **Solid** | 70 tests over titles captured from real pages |
 | Amazon extraction | **Solid** | Verified on 5 live listings incl. out-of-stock, suppressed buy box, electronics, tools |
-| Target adapter | **Works** | Live search + PDP, no bot challenge, ~1.1s |
-| Home Depot adapter | **Works** | Live search, no bot challenge, model-number lookup resolves exactly |
-| Walmart adapter | **Partly proven** | Page loads with no bot challenge; DOM price parse fixed against one live search page |
+| Target adapter | **Works** | Live search + PDP, no bot challenge. 3525ms in real Chrome (~1.1s in the old preview browser) |
+| Home Depot adapter | **Works in real Chrome** | 6 results in 18859ms via the popup diagnose, v0.3.8. Model-number lookup resolves exactly |
+| Walmart adapter | **Still unproven in real Chrome** | Blew the adapter budget before returning anything (see issue 9). DOM price parse fixed against one live search page in the old preview browser |
 | Coupon verifier | **Proven by hand, NOT in-extension** | `WELCOME20` applied/measured/reverted on Kyte Baby's live checkout — but via console JS, never through the extension itself |
 | Coupon aggregator sources | **Runs, yield unproven** | `harvest()` confirmed to load CouponFollow in a real tab (v0.3.5 in the wild). Whether the `[data-code]` scrape returns usable codes there is still unverified |
 | Coupon *triggering* | **Was badly wrong, now gated** | v0.3.5 fired on any input matching `/promo\|coupon\|…/`, including aggregators' own search boxes — a self-sustaining tab loop. Fixed in v0.3.6, see `test/coupon-gate.test.js` |
@@ -119,6 +119,26 @@ has not been proven to *succeed* on a real cart — only to no longer fire when 
 
 8. **`examined` counts candidates considered, not matches rejected.** Fine for the card's
    "N candidates considered" line, but don't read more into it.
+
+9. **Every timeout in this repo was tuned in the wrong browser.** The original numbers came
+   from the Electron preview environment, where Target answered in ~1.1s. In real Chrome it
+   takes 3525ms and a Home Depot harvest takes 18859ms — call it 3x across the board. Under
+   the old 22s adapter budget that left Home Depot passing by about a second, and it broke
+   Walmart outright.
+
+   Walmart is two-phase (barcode, then keywords) and each phase carried its own fixed 15s
+   cap, so two phases could bill 30s against a 22s budget. Neither phase's timer ever fired,
+   because neither phase was individually late — the failure only existed in the sum.
+   Home Depot has the identical shape (model number, then keywords) and escaped only because
+   its first phase hit.
+
+   v0.3.9 gives each adapter one shared `deadline` and raises the budget to 30s. A phase with
+   under `MIN_USEFUL_MS` left is skipped rather than started, so the honest answer is "no
+   match" instead of a wasted timeout. **Still to confirm live: that Walmart returns results
+   or a real reason.**
+
+   The general lesson: **a per-call timeout is not a budget.** Any adapter that can make more
+   than one call needs a deadline shared across them, or the caps silently add up.
 
 ---
 

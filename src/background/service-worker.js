@@ -23,7 +23,23 @@ const ADAPTERS = [target, walmart, homedepot];
  * `complete` — and one stalled adapter used to hang the entire comparison,
  * leaving the card spinning "Checking other retailers…" indefinitely.
  */
-const ADAPTER_TIMEOUT_MS = 22000;
+/**
+ * How long any one retailer gets.
+ *
+ * Raised from 22s after measuring in real Chrome rather than the Electron
+ * preview these numbers were first tuned in: Target answered in 3525ms against
+ * the ~1.1s recorded in HANDOFF, and Home Depot needed 18859ms for a single
+ * harvest. Everything tab-based is roughly 3x slower here, and 22s left Home
+ * Depot passing with about a second to spare.
+ *
+ * The adapters now also receive this as a `deadline` and stop starting work
+ * they cannot finish, so this is a backstop rather than the primary control —
+ * a retailer should return "no match" on its own before this ever fires.
+ */
+const ADAPTER_TIMEOUT_MS = 30000;
+
+/** Left for the caller to assemble a card once the adapters report back. */
+const DEADLINE_MARGIN_MS = 1500;
 
 /** Amazon ships free for Prime members, which we assume by default. */
 const AMAZON_SHIPPING = { freeShippingThreshold: 35, flatShipping: 0 };
@@ -67,9 +83,10 @@ async function compare(product) {
 
   // Run adapters concurrently. One retailer being slow or blocked must never
   // hold up or invalidate the others.
+  const deadline = Date.now() + ADAPTER_TIMEOUT_MS - DEADLINE_MARGIN_MS;
   const settled = await Promise.allSettled(
     ADAPTERS.map((a) => withTimeout(
-      a.lookup(source, { preselect, storeId: settings.storeId }),
+      a.lookup(source, { preselect, storeId: settings.storeId, deadline }),
       ADAPTER_TIMEOUT_MS,
       `${a.RETAILER?.id ?? 'adapter'}: timed out`,
     )),
@@ -188,7 +205,11 @@ async function diagnose() {
     const name = a.RETAILER?.name ?? 'unknown';
     const started = Date.now();
     try {
-      const found = await withTimeout(a.lookup(probe, {}), ADAPTER_TIMEOUT_MS, 'timed out');
+      const found = await withTimeout(
+        a.lookup(probe, { deadline: started + ADAPTER_TIMEOUT_MS - DEADLINE_MARGIN_MS }),
+        ADAPTER_TIMEOUT_MS,
+        'timed out',
+      );
       return { name, ok: true, count: found.length, ms: Date.now() - started };
     } catch (e) {
       return {

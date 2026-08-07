@@ -392,6 +392,33 @@ export function withTimeout(promise, ms, message = 'timed out') {
 }
 
 /**
+ * Not worth opening a tab for less than this. A harvest that starts with three
+ * seconds left cannot load a retail page; it just guarantees a timeout instead
+ * of an honest "nothing found".
+ */
+export const MIN_USEFUL_MS = 4000;
+
+/**
+ * How long a harvest may run if the whole adapter must answer by `deadline`.
+ *
+ * Adapters here are two-phase: try the exact identifier (barcode, model
+ * number), fall back to keywords. Each phase used to carry its own fixed cap,
+ * which meant two phases could bill 15s + 15s against a 22s budget and blow it
+ * without either phase's own timer firing. Measured live: Walmart timed out at
+ * 22002ms while both its 15s harvests stayed comfortably inside their limits.
+ *
+ * A deadline is shared, so phases cannot stack past it. Returns null when too
+ * little time remains to bother — the caller should give up with what it has
+ * rather than start something that cannot finish.
+ */
+export function budgetFor(deadline, cap) {
+  if (deadline == null) return cap; // no budget set: keep the old behaviour
+  const remaining = deadline - Date.now();
+  if (remaining < MIN_USEFUL_MS) return null;
+  return Math.min(cap, remaining);
+}
+
+/**
  * Plain JSON fetch, for hosts that don't fight us (Target's redsky, Shopify's
  * product endpoints). Much cheaper than a tab — always prefer it when it works.
  */

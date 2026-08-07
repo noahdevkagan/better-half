@@ -18,7 +18,7 @@
  * the JSON shape is far more stable than their markup.
  */
 
-import { harvest } from '../background/tab-harvester.js';
+import { harvest, budgetFor } from '../background/tab-harvester.js';
 import { decodeEntities, normalizeQuantity, parsePrice } from '../match/normalize.js';
 import { buildKeyword } from '../match/keywords.js';
 
@@ -127,9 +127,13 @@ async function extractSearchResults() {
   return out;
 }
 
-async function runSearch(query) {
+const SEARCH_CAP_MS = 15000;
+
+async function runSearch(query, deadline) {
+  const timeoutMs = budgetFor(deadline, SEARCH_CAP_MS);
+  if (timeoutMs == null) throw new Error('walmart: out of time');
   const url = `https://www.walmart.com/search?q=${encodeURIComponent(query)}`;
-  const res = await harvest(url, extractSearchResults, { timeoutMs: 15000 });
+  const res = await harvest(url, extractSearchResults, { timeoutMs });
   if (!res || res.blocked) {
     // Surfaced rather than swallowed: the caller logs it, and the user simply
     // sees Target-only results instead of a broken card.
@@ -145,20 +149,24 @@ async function runSearch(query) {
  * search does resolve barcodes, so we try that first. An exact hit skips the
  * whole matching problem.
  */
-export async function search(source) {
+export async function search(source, { deadline } = {}) {
   const title = typeof source === 'string' ? source : source?.title;
   const barcode = typeof source === 'string' ? null : source?.barcode;
 
   let items = [];
   if (barcode) {
-    try { items = await runSearch(String(barcode)); } catch (e) {
+    try { items = await runSearch(String(barcode), deadline); } catch (e) {
       if (/bot challenge/.test(e.message)) throw e;
     }
   }
   if (!items.length) {
     const keyword = buildKeyword(title);
     if (!keyword) return [];
-    items = await runSearch(keyword);
+    // The barcode attempt has already spent part of the budget. If too little
+    // is left, returning nothing beats starting a search that cannot land —
+    // "no match" is a true answer, "timed out" is just a wasted 22 seconds.
+    if (budgetFor(deadline, SEARCH_CAP_MS) == null) return [];
+    items = await runSearch(keyword, deadline);
   }
 
   return items.map((it) => ({
@@ -184,8 +192,8 @@ export async function enrich(candidate) {
   return candidate;
 }
 
-export async function lookup(sourceProduct, { preselect } = {}) {
-  const candidates = await search(sourceProduct);
+export async function lookup(sourceProduct, { preselect, deadline } = {}) {
+  const candidates = await search(sourceProduct, { deadline });
   if (!candidates.length) return [];
   return (preselect ? preselect(candidates) : candidates).slice(0, 6);
 }
