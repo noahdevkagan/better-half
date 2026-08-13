@@ -8,7 +8,8 @@
  * real tab load the page, then read the result out of it.
  *
  * Everything here exists to keep that invisible and bounded:
- *   - one reused window, created then hidden, so the user's tab strip is clean
+ *   - one reused window, opened on the first harvest URL then hidden, so there
+ *     is no placeholder tab and the user's tab strip stays clean
  *   - a hard timeout, so a hanging page can't wedge the extension
  *   - a concurrency cap, so we never open a swarm of tabs
  *   - tabs closed in a finally, so a thrown error can't leak them
@@ -201,10 +202,15 @@ const staleSweep = sweepStaleWorkerWindow();
  * a popup window is not reliable, and a popup has no tab strip to keep clean in
  * the first place.
  *
+ * The first URL is loaded as the window's initial tab. Creating an
+ * `about:blank` window and then adding the harvest tab leaves that blank tab
+ * behind (and makes it visible whenever macOS refuses to hide the window).
+ *
  * Returns null when no worker window could be made, meaning "use the caller's
- * current window" — visible, but working beats invisible-and-broken.
+ * current window" — visible, but working beats invisible-and-broken. Otherwise
+ * returns the window id and, for a newly created window, its initial tab.
  */
-async function getWorkerWindow() {
+async function getWorkerWindow(firstUrl) {
   if (workerWindowId != null) {
     try {
       await withTimeout(
@@ -212,7 +218,7 @@ async function getWorkerWindow() {
         HIDE_STEP_TIMEOUT_MS,
         'window lookup hung',
       );
-      return workerWindowId;
+      return { windowId: workerWindowId, initialTab: null };
     } catch {
       // Closed by the user, or the API stopped answering. Either way this id is
       // no longer usable; falling through to make a fresh one beats waiting.
@@ -223,7 +229,7 @@ async function getWorkerWindow() {
   await withTimeout(staleSweep, SWEEP_TIMEOUT_MS, 'sweep hung').catch(() => {});
   try {
     return await withTimeout(
-      createWorkerWindow(),
+      createWorkerWindow(firstUrl),
       WINDOW_SETUP_TIMEOUT_MS,
       'worker window setup hung',
     );
@@ -239,16 +245,30 @@ async function getWorkerWindow() {
  * first is what lets the cleanup and the startup sweep find it later, instead
  * of stranding exactly the kind of window this file exists to avoid.
  */
-async function createWorkerWindow() {
+async function createWorkerWindow(firstUrl) {
   const win = await chrome.windows.create({
-    url: 'about:blank',
+    url: firstUrl,
     focused: false,
     width: 500,
     height: 400,
   });
   await rememberWorkerWindow(win.id);
+
+  // `Window.tabs` is optional in Chrome's API. Querying the new window keeps
+  // this path correct when create() omits it: we reuse the real first tab
+  // rather than adding a duplicate and leaving the original behind.
+  const initialTab = win.tabs?.[0] ?? (await withTimeout(
+    chrome.tabs.query({ windowId: win.id }),
+    HIDE_STEP_TIMEOUT_MS,
+    'initial tab lookup hung',
+  ))[0];
+  if (initialTab?.id == null) throw new Error('worker window has no initial tab');
+
+  // Mark it before hiding the window. The URL is already loading, so its
+  // content script must know immediately that this is one of our own tabs.
+  harvestTabIds.add(initialTab.id);
   await hideWindow(win.id);
-  return workerWindowId;
+  return { windowId: workerWindowId, initialTab };
 }
 
 /**
@@ -313,9 +333,11 @@ export async function harvest(url, extractor, opts = {}) {
 
   let tabId = null;
   try {
-    const windowId = await getWorkerWindow();
-    const tab = await chrome.tabs.create(
-      windowId != null ? { url, windowId, active: false } : { url, active: false },
+    const worker = await getWorkerWindow(url);
+    const tab = worker?.initialTab ?? await chrome.tabs.create(
+      worker != null
+        ? { url, windowId: worker.windowId, active: false }
+        : { url, active: false },
     );
     tabId = tab.id;
     harvestTabIds.add(tabId);
