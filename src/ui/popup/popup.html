@@ -22,7 +22,7 @@
       <input type="checkbox" id="comparisonEnabled">
     </label>
     <label class="row">
-      <span>Test coupon codes at checkout</span>
+      <span>Enable checkout coupon tool</span>
       <input type="checkbox" id="couponsEnabled">
     </label>
     <label class="row">
@@ -37,6 +37,11 @@
       <span>ZIP code</span>
       <input type="text" id="zip" maxlength="5" inputmode="numeric" placeholder="78767">
     </label>
+  </section>
+
+  <section class="checkout">
+    <button id="coupon-run" type="button">Try coupons on this checkout</button>
+    <p id="coupon-status">Run only when you choose, on the checkout tab you’re viewing.</p>
   </section>
 
   <section class="diag">

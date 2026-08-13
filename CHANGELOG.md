@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.12 — 2026-08-13
+
+- Replace broad site access with user-invoked activeTab checkout access
+
 ## 0.3.11 — 2026-08-13
 
 - Regenerate the 128px icon as a valid PNG for Chrome Web Store processing

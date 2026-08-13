@@ -7,6 +7,8 @@
   'use strict';
   const NS = (window.__SD__ = window.__SD__ || {});
   if (!NS.profiles || !NS.verifier) return; // load order guard
+  if (NS.couponRunnerActive) return; // popup reopened on the same checkout
+  NS.couponRunnerActive = true;
 
   const { detectProfile, isCheckoutContext, readSubtotal } = NS.profiles;
   const { verify } = NS.verifier;
@@ -40,7 +42,10 @@
   const domain = resolveMerchant();
 
   // Amazon has its own content script and, by design, barely uses typed codes.
-  if (/(^|\.)amazon\./.test(location.hostname)) return;
+  if (/(^|\.)amazon\./.test(location.hostname)) {
+    NS.couponRunnerActive = false;
+    return;
+  }
 
   /**
    * Generic codes worth a try on almost any storefront.
@@ -184,5 +189,8 @@
   kick();
   const mo = new MutationObserver(() => kick());
   mo.observe(document.documentElement, { childList: true, subtree: true });
-  setTimeout(() => mo.disconnect(), 60000);
+  setTimeout(() => {
+    mo.disconnect();
+    if (!started) NS.couponRunnerActive = false;
+  }, 60000);
 })();

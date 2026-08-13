@@ -43,7 +43,60 @@ async function load() {
   });
 
   renderCodes(codes);
+  wireCouponRunner();
   wireDiagnostics();
+}
+
+/**
+ * Run coupons only on the tab the user explicitly chose by opening the popup.
+ * `activeTab` grants temporary access to that tab without broad access to every
+ * site the user visits.
+ */
+function wireCouponRunner() {
+  const btn = document.getElementById('coupon-run');
+  const status = document.getElementById('coupon-status');
+  const toggle = document.getElementById('couponsEnabled');
+  const idleText = 'Run only when you choose, on the checkout tab you’re viewing.';
+
+  const sync = () => {
+    btn.disabled = !toggle.checked;
+    status.textContent = toggle.checked
+      ? idleText
+      : 'Coupon testing is disabled above.';
+  };
+  toggle.addEventListener('change', sync);
+  sync();
+
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.textContent = 'Starting…';
+    status.textContent = 'Checking this tab for a supported checkout.';
+
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id == null) throw new Error('No active checkout tab found.');
+
+      await chrome.scripting.insertCSS({
+        target: { tabId: tab.id },
+        files: ['src/ui/card.css'],
+      });
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: [
+          'src/coupon/site-profiles.js',
+          'src/coupon/verifier.js',
+          'src/content/coupon-runner.js',
+        ],
+      });
+
+      btn.textContent = 'Coupon check started';
+      status.textContent = 'You can close this popup and watch the checkout page.';
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = 'Try coupons on this checkout';
+      status.textContent = `Could not run here: ${e?.message || e}`;
+    }
+  });
 }
 
 /**
