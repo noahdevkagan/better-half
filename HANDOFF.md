@@ -1,6 +1,6 @@
 # Better Half — handoff
 
-**Version 0.3.9 · 90 tests passing · Chrome MV3 · loads unpacked**
+**Version 0.3.12 · 94 tests passing · Chrome MV3 · loads unpacked**
 
 A Chrome extension that (1) proves coupon codes on your real cart before showing them, and
 (2) compares Amazon prices against Target, Walmart and Home Depot including shipping. No
@@ -73,14 +73,17 @@ has not been proven to *succeed* on a real cart — only to no longer fire when 
 
 2. **Coupon flow still unproven on a real checkout.** It has now been run in a real browser,
    which is how the v0.3.6 tab loop was found (below) — but that was a *false positive*, not
-   a real cart. Still to do: a real Shopify checkout, expect the banner, then either an
+   a real cart. v0.3.12 makes it user-invoked: open the popup on a checkout and click **Try
+   coupons on this checkout**. This uses temporary `activeTab` access instead of broad host
+   access. Still to do: test a real Shopify checkout, expect the banner, then either an
    applied code or "no working code found". Verify the cart is untouched when nothing wins.
 
-3. **Harvest tabs land in the user's own window on macOS.** *Visible symptom fixed and
-   confirmed live in v0.3.7 — no tabs blinking, nothing on the desktop.* `getWorkerWindow()`
-   creates a plain unfocused window and hides it *afterwards* (`windows.update` with
-   `state: 'minimized'`, falling back to `left: -2000, top: -2000`), because macOS rejects
-   `minimized` at *create* time but honours it on a window that already exists.
+3. **Harvest tabs land in the user's own window on macOS.** `getWorkerWindow()` creates a
+   plain unfocused window and hides it *afterwards* (`windows.update` with
+   `{ state: 'minimized' }`, falling back to `left: -2000, top: -2000`), because macOS rejects
+   `minimized` at *create* time but honours it on a window that already exists. v0.3.10
+   opens that window directly on the first harvest URL; the old implementation explicitly
+   opened `about:blank` first and left that placeholder visible whenever hiding failed.
 
    **What that first live run also exposed:** hiding the window made both tab-based
    retailers time out. `windows.update({state:'minimized'})` does not reject on macOS — it
@@ -232,7 +235,7 @@ src/
   match/               normalize · keywords · confidence   ← the tested core
   ledger/store.js      chrome.storage, share-ready schema
   ui/                  card.css, popup/
-test/                  match · search · unsized · hardware · coupon-gate · worker-window
+test/                  match · search · unsized · hardware · coupon-gate · permissions · worker-window
 scripts/               bump.js · live-check.js
 ```
 

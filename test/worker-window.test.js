@@ -36,7 +36,12 @@ function shimChrome({ session = {}, openIds = [] } = {}) {
 
   globalThis.chrome = {
     runtime: { onMessage: { addListener() {} } },
-    tabs: { onUpdated: { addListener() {}, removeListener() {} } },
+    tabs: {
+      onUpdated: { addListener() {}, removeListener() {} },
+      async query({ windowId }) {
+        return [{ id: windowId + 100, status: 'loading' }];
+      },
+    },
     windows: {
       async remove(id) {
         if (!open.has(id)) throw new Error(`No window with id: ${id}`);
@@ -217,6 +222,43 @@ test('a hanging windows.update cannot stall the harvest', async () => {
     elapsedMs < 6000,
     `harvest should give up on hiding and get on with it, took ${Math.round(elapsedMs)}ms`,
   );
+});
+
+test('the first harvest URL replaces the blank worker-window placeholder', async () => {
+  shimChrome({ session: {}, openIds: [] });
+
+  const createdWindows = [];
+  const createdTabs = [];
+  const queriedTabs = [];
+  globalThis.chrome.windows.create = async (options) => {
+    createdWindows.push(options);
+    return { id: 55 }; // Window.tabs is optional in Chrome's API.
+  };
+  globalThis.chrome.tabs.query = async (options) => {
+    queriedTabs.push(options);
+    return [{ id: 56, status: 'complete' }];
+  };
+  globalThis.chrome.tabs.create = async (options) => {
+    createdTabs.push(options);
+    return { id: 57, status: 'complete' };
+  };
+  globalThis.chrome.tabs.get = async () => ({ status: 'complete' });
+  globalThis.chrome.tabs.remove = async () => {};
+  globalThis.chrome.scripting = {
+    async executeScript() { return [{ result: 'ok' }]; },
+  };
+
+  const mod = await freshImport();
+  const url = 'https://www.walmart.com/search?q=helmet';
+  const result = await mod.harvest(url, () => 'ok', { timeoutMs: 2000 });
+
+  assert.equal(result, 'ok');
+  assert.equal(createdWindows.length, 1);
+  assert.equal(createdWindows[0].url, url, 'window opens on the real harvest URL');
+  assert.deepEqual(queriedTabs, [{ windowId: 55 }], 'the initial real tab is reused');
+  assert.deepEqual(createdTabs, [], 'no second tab or about:blank placeholder is created');
+
+  await mod.shutdownWorkerWindow();
 });
 
 test('shutdownWorkerWindow clears the stored id, so the next startup is a no-op', async () => {

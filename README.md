@@ -65,10 +65,12 @@ script is blocked, test in the loaded extension instead.
 buybox-scoped price, plus UPC and pack size from the detail table. The service worker
 queries retailer adapters concurrently and runs every candidate through a match gate.
 
-**Coupons.** At a checkout, the runner collects candidate codes (previously proven ones
-first, then codes the merchant advertises, then a few cheap generics), applies each to the
-real cart, reads the resulting total, and keeps only what worked. Failed codes are never
-shown; the cart is restored if nothing wins.
+**Coupons.** At a checkout, the user opens Better Half and chooses **Try coupons on this
+checkout**. That explicit action grants temporary access to only the current tab; the
+extension does not request access to every site the user visits. The runner collects
+candidate codes (previously proven ones first, then codes the merchant advertises, then a
+few cheap generics), applies each to the real cart, reads the resulting total, and keeps
+only what worked. Failed codes are never shown; the cart is restored if nothing wins.
 
 ## Design notes
 

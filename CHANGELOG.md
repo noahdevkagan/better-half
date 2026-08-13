@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.12 — 2026-08-13
+
+- Replace broad site access with user-invoked activeTab checkout access
+
+## 0.3.11 — 2026-08-13
+
+- Regenerate the 128px icon as a valid PNG for Chrome Web Store processing
+
+## 0.3.10 — 2026-08-13
+
+- Stop opening an about:blank placeholder during retailer checks
+
 ## 0.3.9 — 2026-08-07
 
 - Give each retailer one shared deadline, so two-phase searches cannot stack past the budget

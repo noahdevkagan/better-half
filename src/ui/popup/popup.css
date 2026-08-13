@@ -86,12 +86,14 @@ input[type="text"]:focus {
   border-color: #c7c7cc;
 }
 
+.checkout,
 .diag {
   margin-top: 18px;
   padding-top: 16px;
   border-top: 1px solid var(--line);
 }
 
+.checkout button,
 .diag button {
   width: 100%;
   padding: 9px 12px;
@@ -105,8 +107,24 @@ input[type="text"]:focus {
   transition: border-color 0.15s ease;
 }
 
-.diag button:hover:not(:disabled) { border-color: #c7c7cc; }
+.checkout button {
+  background: #c4726e;
+  border-color: #c4726e;
+  color: #fff;
+  font-weight: 550;
+}
+
+.checkout button:hover:not(:disabled) { background: #b96864; }
+.checkout button:disabled,
 .diag button:disabled { color: var(--muted); cursor: default; }
+.checkout button:disabled { background: #f4f4f4; border-color: var(--line); }
+.diag button:hover:not(:disabled) { border-color: #c7c7cc; }
+
+.checkout p {
+  margin: 7px 2px 0;
+  color: var(--muted);
+  font-size: 11px;
+}
 
 .diag ul { margin-top: 10px; max-height: none; }
 
