@@ -1,10 +1,12 @@
 # Better Half — handoff
 
-**Version 0.3.12 · 94 tests passing · Chrome MV3 · loads unpacked**
+**Version 0.4.0 · Chrome MV3 · loads unpacked**
 
-A Chrome extension that (1) proves coupon codes on your real cart before showing them, and
-(2) compares Amazon prices against Target, Walmart and Home Depot including shipping. No
-login, no accounts, no affiliate links, no server. Everything runs locally.
+A Chrome extension that (1) proves coupon codes on your real cart before showing them,
+(2) compares Amazon prices against Target, Walmart and Home Depot including shipping,
+with Costco as an opt-in retailer, and (3) checks the last 30 days of Amazon purchases for
+price drops and prepares a request for the shopper to review. No Better Half login, no
+affiliate links, no server. Everything runs locally.
 
 Read [README.md](README.md) for the *design rationale* — why each rule exists. This file is the
 *state of play*: what's proven, what isn't, what to do next, and how to debug it.
@@ -14,7 +16,7 @@ Read [README.md](README.md) for the *design rationale* — why each rule exists.
 ## Start here
 
 ```bash
-npm test                  # 90 unit tests, no network
+npm test                  # 103 unit tests, no network
 npm run bump              # 0.3.9 -> 0.3.10, keeps manifest+package in lockstep
 npm run bump -- minor "what changed"     # also writes CHANGELOG.md
 ```
@@ -40,6 +42,8 @@ Be careful here. "Works" below means *verified against a live page or API*, not
 | Target adapter | **Works** | Live search + PDP, no bot challenge. 3525ms in real Chrome (~1.1s in the old preview browser) |
 | Home Depot adapter | **Works in real Chrome** | 6 results in 18859ms via the popup diagnose, v0.3.8. Model-number lookup resolves exactly |
 | Walmart adapter | **Still unproven in real Chrome** | Blew the adapter budget before returning anything (see issue 9). DOM price parse fixed against one live search page in the old preview browser |
+| Costco adapter | **Implemented, live validation needed** | Optional host permission; harvests search and PDP; refuses to guess when shipping is not stated |
+| Amazon 30-day scan | **Implemented, live validation needed** | User-invoked from popup; exact-ASIN current price; order-page selectors need verification against a signed-in account |
 | Coupon verifier | **Proven by hand, NOT in-extension** | `WELCOME20` applied/measured/reverted on Kyte Baby's live checkout — but via console JS, never through the extension itself |
 | Coupon aggregator sources | **Runs, yield unproven** | `harvest()` confirmed to load CouponFollow in a real tab (v0.3.5 in the wild). Whether the `[data-code]` scrape returns usable codes there is still unverified |
 | Coupon *triggering* | **Was badly wrong, now gated** | v0.3.5 fired on any input matching `/promo\|coupon\|…/`, including aggregators' own search boxes — a self-sustaining tab loop. Fixed in v0.3.6, see `test/coupon-gate.test.js` |

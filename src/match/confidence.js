@@ -132,6 +132,23 @@ function brandInfo(source, candidate) {
   };
 }
 
+/**
+ * Unsized generic goods need a brand anchor when Amazon supplies one.
+ *
+ * "Adjustable kids helmet knee pad elbow" can describe dozens of unrelated
+ * marketplace bundles. Six matching category words are not product identity;
+ * requiring TCCVANAS (or whatever the source brand is) prevents search-result
+ * reordering from comparing a different helmet on every run.
+ */
+function sourceBrandAppears(source, candidate) {
+  const brand = String(source.brand || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (!brand || brand === 'generic' || brand.length < 3) return true;
+  const candidateBrand = String(candidate.brand || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (candidateBrand === brand) return true;
+  const title = ` ${String(candidate.title || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ')} `;
+  return brand.split(/\s+/).every((token) => title.includes(` ${token} `));
+}
+
 function discriminatorProfile(title) {
   const text = decodeEntities(stripBidi(title));
   const profile = {};
@@ -220,6 +237,9 @@ export function matchConfidence(source, candidate) {
   // items as single units, but demand stronger title agreement to compensate
   // for the missing signal.
   if (!source.quantity && !candidate.quantity) {
+    if (!sourceBrandAppears(source, candidate)) {
+      return { tier: TIER.REJECT, reasons: [`unsized item, source brand ${source.brand} is absent`] };
+    }
     const strict = leadTokensPresent(source.title, candidate.title, 6);
     if (!strict.ok) {
       return { tier: TIER.REJECT, reasons: [`unsized item, weak title match: missing ${strict.missing.join(', ')}`] };
@@ -351,4 +371,6 @@ function round2(n) {
   return Math.round(n * 100) / 100;
 }
 
-export const __test__ = { discriminatorProfile, leadTokensPresent, contentTokens, quantitiesMatch };
+export const __test__ = {
+  discriminatorProfile, leadTokensPresent, contentTokens, quantitiesMatch, sourceBrandAppears,
+};

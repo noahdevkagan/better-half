@@ -402,7 +402,10 @@
    * the spinner is replaced. A stuck "Checking other retailers…" is the worst
    * failure mode there is, because it looks like it's still working.
    */
-  const OVERALL_TIMEOUT_MS = 26000;
+  // Must exceed the background's 30s adapter ceiling. When that budget was
+  // raised from 22s without changing this guard, the page gave up first and
+  // rendered a generic "Could not reach" card even when results arrived later.
+  const OVERALL_TIMEOUT_MS = 33000;
 
   async function run() {
     const product = extract();
