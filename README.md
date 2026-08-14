@@ -3,10 +3,11 @@
 > Picking this up after a break? Start with **[HANDOFF.md](HANDOFF.md)** — current state,
 > what is proven vs unproven, open issues, and the debugging playbook.
 
-A Chrome extension that does two things, with **no login, no accounts, and no affiliate links**:
+A Chrome extension that does three things, with **no Better Half login, no accounts, and no affiliate links**:
 
 1. **Coupon codes that actually work.** Never shows a code that hasn't just been proven on your real cart.
-2. **True total-cost comparison.** While you're on Amazon, checks Target and Walmart including shipping.
+2. **True total-cost comparison.** While you're on Amazon, checks Target, Walmart and Home Depot including shipping. Costco.com is an opt-in retailer.
+3. **30-day Amazon purchase check.** On demand, reads recent Amazon orders, checks today's price for the exact ASIN, and prepares a courtesy-adjustment request when the price fell.
 
 Everything runs locally. No server, nothing leaves your machine.
 
@@ -64,6 +65,12 @@ script is blocked, test in the loaded extension instead.
 **Comparison.** A content script reads the Amazon page — availability first, then a
 buybox-scoped price, plus UPC and pack size from the detail table. The service worker
 queries retailer adapters concurrently and runs every candidate through a match gate.
+
+**Amazon purchases.** The popup button opens Amazon's order history and reads up to 30
+items purchased in the last 30 days. Current prices are checked against the exact ASIN.
+Order numbers and purchase details stay in memory for the scan and are not persisted.
+Amazon does not guarantee post-purchase adjustments, so Better Half copies a request and
+opens customer service; it never promises or automatically submits a refund request.
 
 **Coupons.** At a checkout, the user opens Better Half and chooses **Try coupons on this
 checkout**. That explicit action grants temporary access to only the current tab; the
@@ -147,6 +154,12 @@ non-consumable invisible — electronics, apparel, jewellery. When *neither* sid
 size we compare as single units but demand a stronger title match. When only one side has
 one, we reject: we can't claim they're the same.
 
+**Generic unsized goods require the source brand.** Titles such as "Adjustable Kids
+Helmet with Knee Pads" describe a category, not a unique product. When Amazon supplies a
+brand and there is no exact barcode or model, that brand must also appear in the candidate
+listing. This prevents retailer search reordering from comparing a different helmet on
+each run.
+
 **Variant attributes ≠ product-line discriminators.** Colour and fitted size don't change
 what the product is — an Oura Ring in Silver size 10 and Deep Rose size 8 are the same
 product at the same price, so blocking on "silver" loses a real $100 saving. They're
@@ -188,6 +201,7 @@ only the true equivalent matches.
 |---|---|
 | Amazon extraction | Validated on 3 live products, incl. an out-of-stock case |
 | Target adapter | Validated live (search + PDP, no bot challenge) |
+| Costco adapter | Opt-in; browser-harvested search/PDP, live verification still required |
 | Match gate | 27 unit tests over real captured titles |
 | Coupon verifier | Apply/measure/revert validated on a live Shopify checkout |
 | **Walmart adapter** | **Unproven — see below** |
@@ -202,7 +216,7 @@ extension yet. If it stays blocked, comparison degrades to Target-only, which wo
 ```
 src/
   background/   service worker, hidden-tab harvester, coupon sources
-  adapters/     target · walmart · homedepot
+  adapters/     target · walmart · homedepot · costco
   content/      amazon-pdp, coupon-runner
   coupon/       site-profiles, verifier
   match/        normalize, keywords, confidence
@@ -229,8 +243,8 @@ publicly embedded in Target's own web client and is visible to anyone who opens 
 No credentials, accounts, or personal data are used anywhere in this project.
 
 **Nothing leaves your machine.** No server, no analytics, no affiliate links, no accounts.
-Retailer lookups go directly from your browser to the retailer, exactly as if you'd
-searched their site yourself.
+Retailer lookups go directly from your browser to each enabled retailer, exactly as if
+you'd searched the site yourself.
 
 **Coupon verification modifies a live cart** — it applies discount codes, reads the
 resulting total, and reverts. It never clicks a pay/submit button and aborts if payment

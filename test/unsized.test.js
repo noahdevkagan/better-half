@@ -81,6 +81,25 @@ test('unsized matching still rejects a different product', () => {
   assert.equal(m.tier, TIER.REJECT);
 });
 
+test('generic helmet wording cannot substitute a different brand', () => {
+  const source = prod(
+    'Adjustable Kids Helmet with Knee Pad Elbow Pads Wrist Guards Toddler Bike Helmet',
+    { brand: 'TCCVANAS' },
+  );
+  const candidate = prod(
+    'Adjustable Kids Helmet with Knee Pad Elbow Pads Wrist Guards for Biking',
+  );
+  const match = matchConfidence(source, candidate);
+  assert.equal(match.tier, TIER.REJECT);
+  assert.match(match.reasons.join(' '), /source brand TCCVANAS is absent/i);
+});
+
+test('an unsized candidate carrying the source brand remains comparable', () => {
+  const source = prod('Adjustable Kids Helmet Knee Pad Elbow Pads Wrist Guards', { brand: 'TCCVANAS' });
+  const candidate = prod('TCCVANAS Adjustable Kids Helmet Knee Pad Elbow Pads Wrist Guards');
+  assert.equal(matchConfidence(source, candidate).tier, TIER.CONFIDENT);
+});
+
 test('a parent listing matches its variant', () => {
   const m = matchConfidence(prod(AMZ_OURA), prod(TGT_OURA));
   assert.equal(m.tier, TIER.CONFIDENT);

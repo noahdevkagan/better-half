@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0 — 2026-08-14
+
+- add 30-day Amazon price-drop checks and optional Costco comparisons
+
 ## 0.3.12 — 2026-08-13
 
 - Replace broad site access with user-invoked activeTab checkout access

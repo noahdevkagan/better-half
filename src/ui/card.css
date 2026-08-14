@@ -123,3 +123,29 @@
 @media (prefers-color-scheme: dark) {
   .sd-card, .sd-banner { background: #fff; color: #1d1d1f; }
 }
+
+/* Amazon order-history scan ---------------------------------------------- */
+
+#bh-order-scan {
+  box-sizing: border-box;
+  margin: 0 0 22px;
+  padding: 22px 24px;
+  background: #fff;
+  border: 1px solid #dfece4;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  color: #1d1d1f;
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+#bh-order-scan * { box-sizing: border-box; }
+#bh-order-scan .bh-os-kicker { color: #0a7d3f; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+#bh-order-scan h2 { margin: 5px 0 4px; color: #1d1d1f; font-size: 20px; font-weight: 600; }
+#bh-order-scan .bh-os-status { margin: 0; color: #3a3a3c; }
+#bh-order-scan .bh-os-note { margin: 16px 0 0; color: #8e8e93; font-size: 12px; }
+#bh-order-scan .bh-os-row { padding: 14px 0; border-bottom: 1px solid #f1f1f1; }
+#bh-order-scan .bh-os-row:last-child { border-bottom: 0; }
+#bh-order-scan .bh-os-row a { color: #1d1d1f; font-weight: 550; text-decoration: none; }
+#bh-order-scan .bh-os-prices { margin: 3px 0 8px; color: #0a7d3f; font-size: 13px; }
+#bh-order-scan button { padding: 7px 11px; border: 1px solid #d8d8dc; border-radius: 7px; background: #fff; color: #3a3a3c; cursor: pointer; font: inherit; font-size: 12px; }
+#bh-order-scan button:hover { border-color: #8e8e93; }

@@ -22,6 +22,10 @@
       <input type="checkbox" id="comparisonEnabled">
     </label>
     <label class="row">
+      <span>Include Costco.com</span>
+      <input type="checkbox" id="costcoEnabled">
+    </label>
+    <label class="row">
       <span>Enable checkout coupon tool</span>
       <input type="checkbox" id="couponsEnabled">
     </label>
@@ -37,6 +41,11 @@
       <span>ZIP code</span>
       <input type="text" id="zip" maxlength="5" inputmode="numeric" placeholder="78767">
     </label>
+  </section>
+
+  <section class="history">
+    <button id="history-run" type="button">Check Amazon purchases — last 30 days</button>
+    <p>Looks for price drops, then prepares a request you can review and send to Amazon.</p>
   </section>
 
   <section class="checkout">

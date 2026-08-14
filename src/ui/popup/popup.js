@@ -11,6 +11,7 @@ const DEFAULTS = {
   prime: true,
   redcard: false,
   comparisonEnabled: true,
+  costcoEnabled: false,
   couponsEnabled: true,
 };
 
@@ -43,8 +44,50 @@ async function load() {
   });
 
   renderCodes(codes);
+  wireCostcoToggle(settings);
+  wireAmazonHistory();
   wireCouponRunner();
   wireDiagnostics();
+}
+
+/** Costco access is optional and requested only when the user turns it on. */
+function wireCostcoToggle(settings) {
+  const toggle = document.getElementById('costcoEnabled');
+  const origin = 'https://www.costco.com/*';
+  toggle.checked = settings.costcoEnabled === true;
+
+  chrome.permissions.contains({ origins: [origin] }).then((granted) => {
+    if (!granted && toggle.checked) {
+      toggle.checked = false;
+      save({ costcoEnabled: false });
+    }
+  });
+
+  toggle.addEventListener('change', async () => {
+    try {
+      if (toggle.checked) {
+        const granted = await chrome.permissions.request({ origins: [origin] });
+        toggle.checked = granted;
+        await save({ costcoEnabled: granted });
+        return;
+      }
+      await save({ costcoEnabled: false });
+      await chrome.permissions.remove({ origins: [origin] });
+    } catch {
+      toggle.checked = false;
+      await save({ costcoEnabled: false });
+    }
+  });
+}
+
+/** Open Amazon's own order page; the content script runs the scan there. */
+function wireAmazonHistory() {
+  document.getElementById('history-run').addEventListener('click', async () => {
+    await chrome.tabs.create({
+      url: 'https://www.amazon.com/gp/your-account/order-history?orderFilter=months-3#better-half-scan',
+    });
+    window.close();
+  });
 }
 
 /**

@@ -8,14 +8,22 @@ import { matchConfidence, buildVerdict, TIER } from '../match/confidence.js';
 import * as target from '../adapters/target.js';
 import * as walmart from '../adapters/walmart.js';
 import * as homedepot from '../adapters/homedepot.js';
+import * as costco from '../adapters/costco.js';
 import * as ledger from '../ledger/store.js';
 import * as couponSources from './coupon-sources.js';
+import { checkAmazonPurchases } from './amazon-price.js';
 import { withTimeout, isHarvestTab } from './tab-harvester.js';
 
 // Target answers plain fetch() in milliseconds. Walmart and Home Depot need a
 // harvested tab, and Walmart may be blocked outright, so no adapter is allowed
 // to gate the result — they run concurrently and failures are dropped.
-const ADAPTERS = [target, walmart, homedepot];
+const BASE_ADAPTERS = [target, walmart, homedepot];
+
+async function adaptersFor(settings) {
+  if (!settings.costcoEnabled || !globalThis.chrome?.permissions?.contains) return BASE_ADAPTERS;
+  const granted = await chrome.permissions.contains({ origins: ['https://www.costco.com/*'] });
+  return granted ? [...BASE_ADAPTERS, costco] : BASE_ADAPTERS;
+}
 
 /**
  * Hard ceiling per retailer. Tab-based adapters can stall on a slow page, a
@@ -58,6 +66,7 @@ function quantityLabel(q) {
 
 async function compare(product) {
   const settings = await ledger.getSettings();
+  const adapters = await adaptersFor(settings);
 
   const sourceQuantity = normalizeQuantity(product.title, product.structured || {});
   const source = {
@@ -85,7 +94,7 @@ async function compare(product) {
   // hold up or invalidate the others.
   const deadline = Date.now() + ADAPTER_TIMEOUT_MS - DEADLINE_MARGIN_MS;
   const settled = await Promise.allSettled(
-    ADAPTERS.map((a) => withTimeout(
+    adapters.map((a) => withTimeout(
       a.lookup(source, { preselect, storeId: settings.storeId, deadline }),
       ADAPTER_TIMEOUT_MS,
       `${a.RETAILER?.id ?? 'adapter'}: timed out`,
@@ -101,7 +110,7 @@ async function compare(product) {
   let examined = 0;
 
   settled.forEach((res, i) => {
-    const adapter = ADAPTERS[i];
+    const adapter = adapters[i];
     if (res.status === 'rejected') {
       // Keep the REASON, not just the name. "Could not reach Target" is
       // undiagnosable; "Target: rate-limited, retrying in 40s" is actionable,
@@ -139,7 +148,10 @@ async function compare(product) {
         brandNote: m.brandNote || null,
         aftermarket: m.aftermarket || false,
         shipping,
-        total: hasPrice ? round2(c.price + shipping) : null,
+        // A retailer with unknown shipping cannot support a true-total claim.
+        // Costco uses this path when its page does not state whether shipping
+        // is included; silence beats an invented saving.
+        total: hasPrice && shipping != null ? round2(c.price + shipping) : null,
         unitPrice: hasPrice ? unitPrice(c.price, c.quantity) : null,
         unitLabel: c.quantity?.unitLabel,
         quantityLabel: quantityLabel(c.quantity),
@@ -190,6 +202,8 @@ function round2(n) {
  * an opaque failure into something you can read and act on.
  */
 async function diagnose() {
+  const settings = await ledger.getSettings();
+  const adapters = await adaptersFor(settings);
   const probe = {
     title: 'Similac 360 Total Care Sensitive Infant Formula 30.2oz',
     barcode: '070074681238',
@@ -201,7 +215,7 @@ async function diagnose() {
     unitPrice: null,
   };
 
-  const results = await Promise.all(ADAPTERS.map(async (a) => {
+  const results = await Promise.all(adapters.map(async (a) => {
     const name = a.RETAILER?.name ?? 'unknown';
     const started = Date.now();
     try {
@@ -232,6 +246,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .then(sendResponse)
       .catch((e) => sendResponse({ error: String(e?.message || e) }));
     return true; // async
+  }
+
+  if (msg?.type === 'CHECK_AMAZON_PURCHASES') {
+    checkAmazonPurchases(msg.items)
+      .then(sendResponse)
+      .catch((e) => sendResponse({ error: String(e?.message || e) }));
+    return true;
   }
 
   if (msg?.type === 'COUPON_RESULTS') {

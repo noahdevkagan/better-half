@@ -15,7 +15,18 @@ test('site access is explicit instead of broad', () => {
 
   assert.ok(!patterns.includes('<all_urls>'));
   assert.ok(!patterns.some((pattern) => ['*://*/*', 'http://*/*', 'https://*/*'].includes(pattern)));
-  assert.equal(manifest.optional_host_permissions, undefined);
+  assert.deepEqual(manifest.optional_host_permissions, ['https://www.costco.com/*']);
+});
+
+test('Costco access is narrow and optional', () => {
+  assert.ok(!manifest.host_permissions.includes('https://www.costco.com/*'));
+  assert.ok(manifest.optional_host_permissions.includes('https://www.costco.com/*'));
+});
+
+test('the Amazon order scan uses site access, not browser-history access', () => {
+  assert.ok(!manifest.permissions.includes('history'));
+  const staticFiles = manifest.content_scripts.flatMap((script) => script.js || []);
+  assert.ok(staticFiles.includes('src/content/amazon-orders.js'));
 });
 
 test('checkout access is temporary and user-invoked', () => {
